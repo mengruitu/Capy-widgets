@@ -54,37 +54,30 @@ async function debugFetch(params = {}) {
     const html = typeof response === 'string' ? response : (response && response.data ? String(response.data) : '');
 
     const hints = [];
-    if (/Just a moment|cf-browser-verification|Checking your browser/i.test(html)) hints.push('命中 Cloudflare / Just a moment');
-    if (/videoBox/i.test(html)) hints.push('包含 videoBox');
-    if (/video-wrapper/i.test(html)) hints.push('包含 video-wrapper');
-    if (/href="\/videos\//i.test(html)) hints.push('包含 /videos/ 链接');
-    if (/class="title"/i.test(html)) hints.push('包含 title class');
-    if (/DPlayer|m3u8/i.test(html)) hints.push('包含播放器相关字样');
-    if (!hints.length) hints.push('未命中任何预设特征');
+    if (/Just a moment|cf-browser-verification|Checking your browser/i.test(html)) hints.push('Cloudflare');
+    if (/videoBox/i.test(html)) hints.push('videoBox');
+    if (/video-wrapper/i.test(html)) hints.push('video-wrapper');
+    if (/href="\/videos\//i.test(html)) hints.push('/videos/');
+    if (/class="title"/i.test(html)) hints.push('title-class');
+    if (/DPlayer|m3u8/i.test(html)) hints.push('player');
+    if (!hints.length) hints.push('no-hints');
 
-    const desc = [
-      `URL: ${targetUrl}`,
-      `命中特征: ${hints.join(' | ')}`,
-      '',
-      '=== HTML 前 1200 字 ===',
-      cut(html.replace(/\s+/g, ' '), 1200),
-      '',
-      '=== 原始响应前 1200 字 ===',
-      cut(raw.replace(/\s+/g, ' '), 1200)
-    ].join('\n');
+    const htmlOneLine = cut(html.replace(/\s+/g, ' '), 180);
+    const rawOneLine = cut(raw.replace(/\s+/g, ' '), 180);
 
-    return [{
-      id: 'debug-one',
-      type: 'text',
-      title: 'JAVDay 调试结果',
-      description: desc
-    }];
+    return [
+      { id: 'dbg1', type: 'text', title: `URL: ${cut(targetUrl, 120)}` },
+      { id: 'dbg2', type: 'text', title: `HINTS: ${cut(hints.join(' | '), 120)}` },
+      { id: 'dbg3', type: 'text', title: `HTML: ${htmlOneLine}` },
+      { id: 'dbg4', type: 'text', title: `RAW: ${rawOneLine}` }
+    ];
   } catch (error) {
-    return [{
-      id: 'err',
-      type: 'text',
-      title: '调试失败',
-      description: String(error && error.message || error)
-    }];
+    return [
+      {
+        id: 'err',
+        type: 'text',
+        title: `ERR: ${String(error && error.message || error)}`
+      }
+    ];
   }
 }
