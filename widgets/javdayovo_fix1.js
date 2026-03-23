@@ -190,36 +190,70 @@ function buildPageUrl(baseUrl, sortBy, page) {
 
 function parseVideoCards(html) {
   const results = [];
-  const blocks = html.split('<a class="videoBox"').slice(1);
-  for (const block of blocks) {
-    const hrefMatch = block.match(/href="([^"]+)"/i);
-    const titleMatch = block.match(/<div class="title">([\s\S]*?)<\/div>/i);
-    const styleMatch = block.match(/class="videoBox-cover"[^>]*style="([^"]+)"/i);
-    if (!hrefMatch || !titleMatch) continue;
-    let link = hrefMatch[1];
+
+  function pushItem(link, title, imgSrc) {
+    if (!link || !title) return;
     if (!/^https?:\/\//i.test(link)) {
       link = link.startsWith('//') ? `https:${link}` : `${BASE_URL}${link.startsWith('/') ? '' : '/'}${link}`;
     }
-    let imgSrc = '';
-    if (styleMatch) {
-      const urlMatch = styleMatch[1].match(/url\(\s*['"]?([^'")]+)['"]?\s*\)/i);
-      if (urlMatch && urlMatch[1]) {
-        imgSrc = urlMatch[1];
-        if (imgSrc.startsWith('//')) imgSrc = `https:${imgSrc}`;
-        else if (!/^https?:\/\//i.test(imgSrc)) imgSrc = `${BASE_URL}${imgSrc.startsWith('/') ? '' : '/'}${imgSrc}`;
-      }
+    if (imgSrc) {
+      if (imgSrc.startsWith('//')) imgSrc = `https:${imgSrc}`;
+      else if (!/^https?:\/\//i.test(imgSrc)) imgSrc = `${BASE_URL}${imgSrc.startsWith('/') ? '' : '/'}${imgSrc}`;
     }
-    const title = safeText(decodeHtmlEntities(titleMatch[1]));
     results.push({
       id: `${results.length}|${link}`,
       type: 'url',
-      title,
-      imgSrc,
-      backdropPath: imgSrc,
+      title: safeText(decodeHtmlEntities(title)),
+      imgSrc: imgSrc || '',
+      backdropPath: imgSrc || '',
       link,
       description: '来自 JAVDay',
       mediaType: 'movie'
     });
+  }
+
+  // 方案1：精确匹配 <a class="videoBox" ...>
+  const blocks1 = html.split('<a class="videoBox"').slice(1);
+  for (const block of blocks1) {
+    const hrefMatch = block.match(/href="([^"]+)"/i);
+    const titleMatch = block.match(/<div class="title">([\s\S]*?)<\/div>/i);
+    const styleMatch = block.match(/class="videoBox-cover"[^>]*style="([^"]+)"/i);
+    let imgSrc = '';
+    if (styleMatch) {
+      const urlMatch = styleMatch[1].match(/url\(\s*['"]?([^'")]+)['"]?\s*\)/i);
+      if (urlMatch && urlMatch[1]) imgSrc = urlMatch[1];
+    }
+    pushItem(hrefMatch && hrefMatch[1], titleMatch && titleMatch[1], imgSrc);
+  }
+  if (results.length) return results;
+
+  // 方案2：更宽松匹配 videoBox 链接块
+  const re = /<a[^>]*class="[^"]*videoBox[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const link = m[1];
+    const inner = m[2] || '';
+    const titleMatch = inner.match(/<div[^>]*class="[^"]*title[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
+      || inner.match(/title="([^"]+)"/i);
+    const styleMatch = inner.match(/class="[^"]*videoBox-cover[^"]*"[^>]*style="([^"]+)"/i);
+    const imgMatch = inner.match(/<img[^>]+src="([^"]+)"/i) || inner.match(/<img[^>]+data-src="([^"]+)"/i);
+    let imgSrc = '';
+    if (styleMatch) {
+      const urlMatch = styleMatch[1].match(/url\(\s*['"]?([^'")]+)['"]?\s*\)/i);
+      if (urlMatch && urlMatch[1]) imgSrc = urlMatch[1];
+    } else if (imgMatch && imgMatch[1]) {
+      imgSrc = imgMatch[1];
+    }
+    pushItem(link, titleMatch && titleMatch[1], imgSrc);
+  }
+  if (results.length) return results;
+
+  // 方案3：最后兜底，按 href=/videos/... 抠标题
+  const re2 = /href="(\/videos\/[^"]+)"[\s\S]{0,1200}?<div[^>]*class="[^"]*title[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
+  while ((m = re2.exec(html)) !== null) {
+    const link = m[1];
+    const title = m[2];
+    pushItem(link, title, '');
   }
   return results;
 }
