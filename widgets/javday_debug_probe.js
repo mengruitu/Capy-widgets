@@ -62,40 +62,29 @@ async function debugFetch(params = {}) {
     if (/DPlayer|m3u8/i.test(html)) hints.push('包含播放器相关字样');
     if (!hints.length) hints.push('未命中任何预设特征');
 
-    return [
-      {
-        id: 'status',
-        type: 'text',
-        title: '调试状态',
-        description: `请求成功\nURL: ${targetUrl}`
-      },
-      {
-        id: 'hints',
-        type: 'text',
-        title: '命中特征',
-        description: hints.join(' | ')
-      },
-      {
-        id: 'html-head',
-        type: 'text',
-        title: 'HTML 前 1000 字',
-        description: cut(html.replace(/\s+/g, ' '), 1000)
-      },
-      {
-        id: 'raw-head',
-        type: 'text',
-        title: '原始响应前 1000 字',
-        description: cut(raw.replace(/\s+/g, ' '), 1000)
-      }
-    ];
+    const desc = [
+      `URL: ${targetUrl}`,
+      `命中特征: ${hints.join(' | ')}`,
+      '',
+      '=== HTML 前 1200 字 ===',
+      cut(html.replace(/\s+/g, ' '), 1200),
+      '',
+      '=== 原始响应前 1200 字 ===',
+      cut(raw.replace(/\s+/g, ' '), 1200)
+    ].join('\n');
+
+    return [{
+      id: 'debug-one',
+      type: 'text',
+      title: 'JAVDay 调试结果',
+      description: desc
+    }];
   } catch (error) {
-    return [
-      {
-        id: 'err',
-        type: 'text',
-        title: '调试失败',
-        description: String(error && error.message || error)
-      }
-    ];
+    return [{
+      id: 'err',
+      type: 'text',
+      title: '调试失败',
+      description: String(error && error.message || error)
+    }];
   }
 }
