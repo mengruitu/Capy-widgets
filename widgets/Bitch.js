@@ -4,13 +4,15 @@ var WidgetMetadata = {
   description: "Bitch Lives",
   author: "Discount Code：VEUS",
   site: "Discount Code：VEUS",
-  version: "1.0.0",
+  version: "1.0.1",
   requiredVersion: "0.0.1",
+  detailCacheDuration: 300,
   modules: [
     {
       title: "碧池直播",
       requiresWebView: false,
       functionName: "getVideos",
+      type: "list",
       params: [
         {
           name: "category",
@@ -157,6 +159,35 @@ var WidgetMetadata = {
   ]
 };
 
+function safeParseData(raw) {
+  if (raw == null) {
+    throw new Error("API返回空数据");
+  }
+
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      throw new Error("返回内容不是有效 JSON");
+    }
+  }
+
+  if (typeof raw !== "object") {
+    throw new Error("返回数据类型异常");
+  }
+
+  return raw;
+}
+
+function buildDetailLink(item, category) {
+  return encodeURIComponent(JSON.stringify({
+    category,
+    title: item.title || "未命名",
+    coverUrl: item.img || "",
+    videoUrl: item.address || ""
+  }));
+}
+
 async function getVideos(params = {}) {
   try {
     if (!params.category) {
@@ -164,39 +195,82 @@ async function getVideos(params = {}) {
     }
 
     const url = `http://api.maiyoux.com:81/mf/${params.category}.txt`;
-    console.log('[视频获取] 请求URL:', url);
+    console.log("[视频获取] 请求URL:", url);
 
     const response = await Widget.http.get(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 4.4.2; OPPO R11 Build/NMF26X) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/30.0.0.0 Mobile Safari/537.36',
-        'Content-Type': 'application/octet-stream'
-      }
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15",
+        "Accept": "application/json, text/javascript, */*; q=0.01"
+      },
+      timeout: 10000
     });
 
-    if (!response?.data) {
-      throw new Error("API返回空数据");
+    const data = safeParseData(response?.data);
+    if (!Array.isArray(data.zhubo)) {
+      throw new Error("无效的数据格式：缺少 zhubo 数组");
     }
 
-    if (typeof response.data !== 'object' || !Array.isArray(response.data.zhubo)) {
-      throw new Error("无效的数据格式");
-    }
-
-    const videos = response.data.zhubo
-      .filter(item => item.address && item.title)
-      .map(item => ({
-        id: item.address,
-        type: 'url',
-        title: item.title.trim(),
-        posterPath: item.img || '',
-        videoUrl: item.address
-      }));
+    const videos = data.zhubo
+      .filter(item => item && item.address && item.title)
+      .map(item => {
+        const detailLink = buildDetailLink(item, params.category);
+        return {
+          id: item.address,
+          type: "link",
+          title: String(item.title).trim(),
+          description: params.category,
+          coverUrl: item.img || "",
+          link: detailLink,
+          subTitle: "直播"
+        };
+      });
 
     if (videos.length === 0) {
-      console.warn('警告: 过滤后视频列表为空，原始数据:', response.data);
+      return [{
+        id: "empty",
+        type: "text",
+        title: "没有可用数据",
+        description: `分类 ${params.category} 当前为空`
+      }];
     }
 
     return videos;
   } catch (error) {
-    throw new Error(`视频获取失败: ${error.message}`);
+    return [{
+      id: "error",
+      type: "text",
+      title: "请求失败",
+      description: String(error.message || error)
+    }];
+  }
+}
+
+async function loadDetail(link) {
+  try {
+    const item = JSON.parse(decodeURIComponent(link));
+    if (!item.videoUrl) {
+      throw new Error("缺少播放地址");
+    }
+
+    return [{
+      id: item.videoUrl,
+      type: "link",
+      title: item.title || "未命名直播",
+      description: item.category ? `分类：${item.category}` : "直播源",
+      coverUrl: item.coverUrl || "",
+      episodeItems: [{
+        id: item.videoUrl,
+        type: "url",
+        title: item.title || "立即播放",
+        videoUrl: item.videoUrl
+      }]
+    }];
+  } catch (error) {
+    return [{
+      id: "detail_error",
+      type: "text",
+      title: "详情加载失败",
+      description: String(error.message || error)
+    }];
   }
 }
